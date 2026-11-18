@@ -3,7 +3,7 @@ import { ArrowRight, Home, Pencil, Pause, Play, Trash2 } from 'lucide-react'
 import { apiRequest } from './api'
 import { photoUrl, type Stay } from './data'
 
-type ManagedStay = Stay & { status: string }
+type ManagedStay = Stay & { status: string; address: string; wifiNetwork: string; wifiPassword: string }
 type HostOption = { id: string; name: string; email: string }
 
 export default function ManageListings({ token, onClose, onCreate }: { token: string; onClose: () => void; onCreate: () => void }) {
@@ -44,7 +44,7 @@ export default function ManageListings({ token, onClose, onCreate }: { token: st
     const form = new FormData(event.currentTarget)
     setBusy(true); setError(''); setNotice('')
     try {
-      await apiRequest(`/admin/listings/${editing.id}`, token, { method: 'PATCH', body: JSON.stringify({ title: form.get('title'), location: form.get('location'), description: form.get('description'), category: form.get('category'), image: form.get('image'), price: Number(form.get('price')), hostId: form.get('hostId'), amenities: editing.amenities }) })
+      await apiRequest(`/admin/listings/${editing.id}`, token, { method: 'PATCH', body: JSON.stringify({ title: form.get('title'), address: form.get('address'), wifiNetwork: form.get('wifiNetwork'), wifiPassword: form.get('wifiPassword'), location: form.get('location'), description: form.get('description'), category: form.get('category'), image: form.get('image'), price: Number(form.get('price')), cleaningFee: Number(form.get('cleaningFee')), hostId: form.get('hostId'), amenities: editing.amenities }) })
       await load(); setEditing(null); setNotice('Annonce modifiée avec succès.')
     } catch (e) { setError(e instanceof Error ? e.message : 'Enregistrement impossible.') } finally { setBusy(false) }
   }
@@ -55,9 +55,13 @@ export default function ManageListings({ token, onClose, onCreate }: { token: st
       {editing ? <section className="wizard-panel manage-edit" key={editing.id}><h1>Modifier l’annonce</h1><form onSubmit={save}>
         <label>Nom du logement<input name="title" defaultValue={editing.title} minLength={3} maxLength={120} required /></label>
         <label>Ville et pays<input name="location" defaultValue={editing.location} maxLength={180} required /></label>
+        <label>Adresse complète du logement<input name="address" defaultValue={editing.address} maxLength={500} placeholder="Numéro, rue, code postal, ville" /></label>
+        <label>Nom du réseau Wi-Fi<input name="wifiNetwork" defaultValue={editing.wifiNetwork} maxLength={128} autoComplete="off" /></label>
+        <label>Mot de passe Wi-Fi<input name="wifiPassword" type="password" defaultValue={editing.wifiPassword} maxLength={256} autoComplete="new-password" /></label>
         <label>Catégorie<input name="category" defaultValue={editing.category} maxLength={80} required /></label>
         <label>Hôte<select name="hostId" defaultValue={editing.hostId} required><option value="" disabled>Choisir un hôte</option>{hosts.map((host) => <option key={host.id} value={host.id}>{host.name} · {host.email}</option>)}</select></label>
         <label>Prix par nuit (€)<input name="price" type="number" defaultValue={editing.price} min={1} max={100000} step="0.01" required /></label>
+        <label>Frais de ménage (€ par séjour)<input name="cleaningFee" type="number" defaultValue={editing.cleaningFee} min={0} max={100000} step="0.01" required /></label>
         <label>Photo de couverture (URL)<input name="image" type="url" defaultValue={photoUrl(editing.image)} required /></label>
         <label>Description<textarea name="description" defaultValue={editing.description} rows={6} minLength={10} maxLength={5000} required /></label>
         <div className="manage-actions"><button type="button" className="text-button" disabled={busy} onClick={() => { setEditing(null); setError('') }}>Annuler</button><button className="button-dark" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer les modifications'} <ArrowRight size={16} /></button></div>

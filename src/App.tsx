@@ -1274,9 +1274,9 @@ function BookingModal({ stay, addons, blockedRanges, initialCheckIn, initialChec
       <div className="price-breakdown">
         <div><span>{stay.price} € × {nights} nuit{nights > 1 ? 's' : ''}</span><span>{subtotal} €</span></div>
         <div><span>Frais de service</span><span>{serviceFee} €</span></div>
-        <div><span>Ménage</span><span>35 €</span></div>
+        <div><span>Ménage</span><span>{formatEuro(stay.cleaningFee)}</span></div>
         {selectedAddons.map((addon) => <div key={addon.id}><span>{addon.name}{addon.priceUnit === 'hour' ? ` × ${addon.quantity} h` : ''}</span><span>{formatEuro(addon.price * addon.quantity)}</span></div>)}
-        <div className="price-total-line"><strong>Total</strong><strong>{formatEuro(subtotal + serviceFee + 35 + addonsTotal)}</strong></div>
+        <div className="price-total-line"><strong>Total</strong><strong>{formatEuro(subtotal + serviceFee + stay.cleaningFee + addonsTotal)}</strong></div>
       </div>
       <button className="button-dark full-button" type="submit">Payer avec Stripe <Check size={17} /></button>
       <p className="form-note">Votre réservation sera enregistrée uniquement après confirmation du paiement.</p>

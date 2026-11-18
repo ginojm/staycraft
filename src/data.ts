@@ -4,6 +4,7 @@ export type Stay = {
   location: string
   region: string
   price: number
+  cleaningFee: number
   rating: number
   reviews: number
   category: string

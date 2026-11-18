@@ -32,6 +32,24 @@ export function registerScheduledMessages(app, auth, admin, route, sanitize) {
     res.status(201).json({ template: rows[0] })
   }))
   app.patch('/api/admin/scheduled-messages/:id', auth, admin, route(async (req, res) => {
+    if (req.body.name !== undefined || req.body.body !== undefined || req.body.event !== undefined) {
+      const parsed=schema.omit({attachments:true}).extend({body:z.string().trim().min(1).max(5000)}).safeParse(req.body)
+      if (!z.string().uuid().safeParse(req.params.id).success || !parsed.success) return res.status(400).json({error:'Modèle invalide.'})
+      const data=parsed.data, body=scheduledMessageHtml(data.body,sanitize)
+      if (!body) return res.status(400).json({error:'Message vide.'})
+      const client=await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const model=await client.query('SELECT id FROM scheduled_messages WHERE id=$1 FOR UPDATE',[req.params.id])
+        if (!model.rowCount) {await client.query('ROLLBACK');return res.status(404).json({error:'Modèle introuvable.'})}
+        const valid=await client.query("SELECT id FROM listings WHERE id=ANY($1::uuid[]) AND status<>'archived' FOR SHARE",[data.listingIds])
+        if(valid.rowCount!==data.listingIds.length){await client.query('ROLLBACK');return res.status(400).json({error:'Logement invalide.'})}
+        await client.query('UPDATE scheduled_messages SET name=$2,body=$3,event=$4,hours_before=$5,enabled=$6 WHERE id=$1',[req.params.id,data.name,body,data.event,data.hours_before,data.enabled])
+        await client.query('DELETE FROM scheduled_message_listings WHERE template_id=$1',[req.params.id])
+        await client.query('INSERT INTO scheduled_message_listings SELECT $1,unnest($2::uuid[])',[req.params.id,data.listingIds])
+        await client.query('COMMIT');return res.json({updated:true})
+      }catch(error){await client.query('ROLLBACK');throw error}finally{client.release()}
+    }
     if (req.body.listingIds !== undefined) {
       const ids = listingIdsSchema.safeParse(req.body.listingIds)
       if (!z.string().uuid().safeParse(req.params.id).success || !ids.success) return res.status(400).json({ error: 'Sélectionnez au moins un logement valide.' })
@@ -120,7 +138,7 @@ async function deliver(templateId, reservationId, sanitize) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const { rows } = await client.query(`SELECT t.*, r.guest_id, r.listing_id, r.check_in, r.check_out, l.title, l.host_id, u.full_name
+    const { rows } = await client.query(`SELECT t.*, r.guest_id, r.listing_id, r.check_in, r.check_out, l.title, l.address, l.wifi_network, l.wifi_password, l.host_id, u.full_name
       FROM scheduled_messages t JOIN users owner ON owner.id=t.owner_id AND owner.is_active
       JOIN reservations r ON r.id=$2 AND r.status='confirmed' JOIN listings l ON l.id=r.listing_id JOIN users u ON u.id=r.guest_id WHERE t.id=$1
       AND EXISTS (SELECT 1 FROM scheduled_message_listings WHERE template_id=t.id AND listing_id=r.listing_id) FOR SHARE OF t,r`, [templateId,reservationId])
@@ -128,9 +146,9 @@ async function deliver(templateId, reservationId, sanitize) {
     if (!row) { await client.query('ROLLBACK'); return false }
     const claimed = await client.query('INSERT INTO scheduled_message_deliveries (template_id,reservation_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING id', [templateId,reservationId])
     if (!claimed.rowCount) { await client.query('ROLLBACK'); return false }
-    const values = { voyageur: row.full_name, logement: row.title, arrivee: new Date(row.check_in).toLocaleDateString('fr-FR', {timeZone:'UTC'}), depart: new Date(row.check_out).toLocaleDateString('fr-FR', {timeZone:'UTC'}) }
+    const values = { voyageur: row.full_name, logement: row.title, adresse: row.address || 'Adresse à confirmer auprès de votre hôte', reseau: row.wifi_network || 'Réseau à confirmer auprès de votre hôte', motdepasse: row.wifi_password || 'Mot de passe à confirmer auprès de votre hôte', arrivee: new Date(row.check_in).toLocaleDateString('fr-FR', {timeZone:'UTC'}), depart: new Date(row.check_out).toLocaleDateString('fr-FR', {timeZone:'UTC'}) }
     const html = scheduledMessageHtml(row.body, sanitize)
-    const body = scheduledMessageHtml(html.replace(/\{\{(voyageur|logement|arrivee|depart)\}\}/g, (_, key) => escape(values[key])), sanitize)
+    const body = scheduledMessageHtml(html.replace(/\{\{(voyageur|logement|adresse|reseau|motdepasse|arrivee|depart)\}\}/g, (_, key) => escape(values[key])), sanitize)
     if (!body) throw new Error('Message programmé vide')
     if (body.length > 5000) throw new Error('Message personnalisé trop long')
     const conversation = await client.query(`INSERT INTO conversations (reservation_id,listing_id) VALUES ($1,$2) ON CONFLICT (reservation_id) WHERE reservation_id IS NOT NULL DO UPDATE SET updated_at=now() RETURNING id`, [reservationId,row.listing_id])

@@ -21,6 +21,9 @@ const migrationNames = [
   '013_scheduled_messages.sql',
   '014_scheduled_message_listings.sql',
   '015_scheduled_attachments.sql',
+  '016_listing_address.sql',
+  '017_listing_wifi.sql',
+  '018_listing_cleaning_fee.sql',
 ]
 
 try {

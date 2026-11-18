@@ -312,6 +312,7 @@ function listingFromRow(row) {
     location: [row.city, row.country].filter(Boolean).join(', '),
     region: row.region,
     price: Number(row.price_per_night),
+    cleaningFee: Number(row.cleaning_fee),
     rating: Number(row.average_rating),
     reviews: Number(row.review_count),
     category: row.category,
@@ -580,6 +581,10 @@ app.get('/api/listings/:listingId/availability', validateUuidParam('listingId'),
 }))
 
 const createListingSchema = z.object({
+  cleaningFee: z.number().min(0).max(100000).multipleOf(0.01).optional(),
+  address: z.string().trim().max(500).optional(),
+  wifiNetwork: z.string().max(128).optional(),
+  wifiPassword: z.string().max(256).optional(),
   title: z.string().trim().min(3).max(120),
   description: z.string().trim().min(10).max(5000),
   location: z.string().trim().min(2).max(180),
@@ -598,9 +603,9 @@ app.post('/api/listings', requireAuth, validate(createListingSchema), asyncRoute
   try {
     await client.query('BEGIN')
     const { rows } = await client.query(
-      `INSERT INTO listings (host_id, title, description, city, region, country, category, price_per_night, cover_image_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-      [req.userId, title, description, city, region, country, category, price, image],
+      `INSERT INTO listings (host_id, title, description, city, region, country, category, price_per_night, cover_image_url, address, wifi_network, wifi_password, cleaning_fee)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+      [req.userId, title, description, city, region, country, category, price, image, req.body.address ?? '', req.body.wifiNetwork ?? '', req.body.wifiPassword ?? '', req.body.cleaningFee ?? 35],
     )
     const listingId = rows[0].id
     if (amenities.length) {
@@ -636,7 +641,7 @@ const requireSuperhost = asyncRoute(async (req, res, next) => {
 
 app.get('/api/admin/listings', requireAuth, requireSuperhost, asyncRoute(async (_req, res) => {
   const { rows } = await pool.query(`${listingSelect} WHERE l.status <> 'archived' GROUP BY l.id, u.full_name, u.avatar_url ORDER BY l.created_at DESC`)
-  res.json({ listings: rows.map((row) => ({ ...listingFromRow(row), status: row.status })) })
+  res.json({ listings: rows.map((row) => ({ ...listingFromRow(row), address: row.address, wifiNetwork: row.wifi_network, wifiPassword: row.wifi_password, status: row.status })) })
 }))
 
 app.get('/api/admin/hosts', requireAuth, requireSuperhost, asyncRoute(async (_req, res) => {
@@ -684,9 +689,10 @@ app.patch('/api/admin/listings/:listingId', requireAuth, requireSuperhost, valid
        city=COALESCE($4,city), country=COALESCE($5,country),
        price_per_night=COALESCE($6,price_per_night), category=COALESCE($7,category),
        cover_image_url=COALESCE($8,cover_image_url), host_id=COALESCE($9,host_id),
-       status=COALESCE($10::listing_status,status), updated_at=now()
+       status=COALESCE($10::listing_status,status), address=COALESCE($11,address),
+       wifi_network=COALESCE($12,wifi_network), wifi_password=COALESCE($13,wifi_password), cleaning_fee=COALESCE($14,cleaning_fee), updated_at=now()
        WHERE id=$1 AND status <> 'archived' RETURNING id`,
-      [req.params.listingId, data.title ?? null, data.description ?? null, location?.[0] ?? null, location ? location.at(-1) : null, data.price ?? null, data.category ?? null, data.image ?? null, data.hostId ?? null, data.status ?? null],
+      [req.params.listingId, data.title ?? null, data.description ?? null, location?.[0] ?? null, location ? location.at(-1) : null, data.price ?? null, data.category ?? null, data.image ?? null, data.hostId ?? null, data.status ?? null, data.address ?? null, data.wifiNetwork ?? null, data.wifiPassword ?? null, data.cleaningFee ?? null],
     )
     if (!result.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Annonce introuvable.' }) }
     if (data.amenities) {
@@ -806,7 +812,7 @@ app.post('/api/bookings', requireAuth, validate(createBookingSchema), asyncRoute
   try {
     await client.query('BEGIN')
     const listingResult = await client.query(
-      `SELECT id, host_id, price_per_night, max_guests FROM listings
+      `SELECT id, host_id, price_per_night, cleaning_fee, max_guests FROM listings
        WHERE id = $1 AND status = 'published' FOR SHARE`,
       [listingId],
     )
@@ -853,7 +859,7 @@ app.post('/api/bookings', requireAuth, validate(createBookingSchema), asyncRoute
     const price = Number(listing.price_per_night)
     const subtotal = price * nights
     const serviceFee = Math.round(subtotal * 0.12)
-    const cleaningFee = 35
+    const cleaningFee = Number(listing.cleaning_fee)
     const addonTotalCents = selectedAddons.reduce((sum, addon) => sum + Math.round(addon.price * 100) * addon.quantity, 0)
     const addonTotal = addonTotalCents / 100
     const conflict = await client.query(
