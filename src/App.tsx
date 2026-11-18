@@ -769,6 +769,7 @@ function App() {
     const title = String(form.get('title') ?? '').trim()
     const location = String(form.get('location') ?? '').trim()
     const price = Number(form.get('price'))
+    const cleaningFee = Number(form.get('cleaningFee'))
     const image = String(form.get('image') ?? '').trim()
     const description = String(form.get('description') ?? '').trim()
     const categoryValue = String(form.get('category') ?? 'Nature')
@@ -780,6 +781,7 @@ function App() {
           title,
           location,
           price,
+          cleaningFee,
           category: categoryValue,
           image,
           description,
