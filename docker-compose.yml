@@ -1,0 +1,73 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: foyaltoloman-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-foyaltoloman}
+      POSTGRES_USER: ${POSTGRES_USER:-foyaltoloman}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env and set POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-foyaltoloman} -d ${POSTGRES_DB:-foyaltoloman}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: foyaltoloman-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: foyaltoloman-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NODE_EXTRA_CA_CERTS: /app/server/certs/ctm-root.pem
+      API_PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-foyaltoloman}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-foyaltoloman}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${PUBLIC_APP_URL:-http://localhost:${APP_PORT:-8080}}/api/auth/google/callback
+      APP_BASE_URL: ${PUBLIC_APP_URL:-http://localhost:${APP_PORT:-8080}}
+      STRIPE_ACCOUNT_ID: ${STRIPE_ACCOUNT_ID:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: "${SMTP_FROM:-Foyaltoloman <noreply@foyaltoloman.local>}"
+    ports:
+      - "${APP_PORT:-8080}:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  postgres_data:
