@@ -13,6 +13,7 @@ import { OAuth2Client } from 'google-auth-library'
 import Stripe from 'stripe'
 import { pool } from './db.js'
 import { registerScheduledMessages } from './scheduled-messages.js'
+import { registerPayouts } from './payouts.js'
 import { sendBookingConfirmation } from './mail.js'
 
 const app = express()
@@ -644,6 +645,41 @@ app.get('/api/admin/listings', requireAuth, requireSuperhost, asyncRoute(async (
   res.json({ listings: rows.map((row) => ({ ...listingFromRow(row), address: row.address, wifiNetwork: row.wifi_network, wifiPassword: row.wifi_password, status: row.status })) })
 }))
 
+app.get('/api/calendars/access', requireAuth, asyncRoute(async (req, res) => {
+  const { rows } = await pool.query("SELECT EXISTS (SELECT 1 FROM listings WHERE host_id = $1 AND status <> 'archived') AS allowed", [req.userId])
+  res.json({ allowed: rows[0].allowed })
+}))
+
+app.get(['/api/admin/calendars', '/api/calendars'], requireAuth, asyncRoute(async (req, res) => {
+  const { rows } = await pool.query("SELECT lower(email) = 'foyal.toloman@gmail.com' AS superhost FROM users WHERE id = $1", [req.userId])
+  const allListings = rows[0]?.superhost === true
+  const [listingResult, reservationResult] = await Promise.all([
+    pool.query(`${listingSelect} WHERE l.status <> 'archived' AND ($1::boolean OR l.host_id = $2::uuid) GROUP BY l.id, u.full_name, u.avatar_url ORDER BY l.created_at DESC`, [allListings, req.userId]),
+    pool.query(
+      `SELECT r.id, r.listing_id, r.check_in, r.check_out, r.status, r.total_amount,
+              guest.full_name AS guest_name, guest.avatar_url AS guest_avatar_url
+       FROM reservations r
+       JOIN users guest ON guest.id = r.guest_id
+       JOIN listings l ON l.id = r.listing_id
+       WHERE l.status <> 'archived' AND ($1::boolean OR l.host_id = $2::uuid)
+       ORDER BY r.check_in ASC`, [allListings, req.userId],
+    ),
+  ])
+  res.json({
+    listings: listingResult.rows.map((row) => ({ ...listingFromRow(row), status: row.status })),
+    reservations: reservationResult.rows.map((row) => ({
+      id: row.id,
+      listingId: row.listing_id,
+      guestName: row.guest_name,
+      guestAvatarUrl: row.guest_avatar_url,
+      checkIn: dateOnly(row.check_in),
+      checkOut: dateOnly(row.check_out),
+      status: row.status,
+      total: Number(row.total_amount),
+    })),
+  })
+}))
+
 app.get('/api/admin/hosts', requireAuth, requireSuperhost, asyncRoute(async (_req, res) => {
   const { rows } = await pool.query(
     'SELECT id, full_name, email FROM users ORDER BY lower(full_name), lower(email)',
@@ -1164,6 +1200,7 @@ app.get('/api/listings/:listingId/reviews', validateUuidParam('listingId'), asyn
 }))
 
 const scheduledMessagesTimer = registerScheduledMessages(app, requireAuth, requireSuperhost, asyncRoute, sanitizeMessageHtml)
+registerPayouts(app, requireAuth, requireSuperhost, asyncRoute)
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Route API introuvable.' }))
 
 app.use(express.static(distDirectory, { index: false, maxAge: 0 }))

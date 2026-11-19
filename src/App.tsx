@@ -27,6 +27,7 @@ import { apiRequest } from './api'
 import DOMPurify from 'dompurify'
 import ListingWizard from './ListingWizard'
 import ManageListings from './ManageListings'
+import Calendars from './Calendars'
 import Settings from './Settings'
 import MessagingSettings from './MessagingSettings'
 import Attachments, { type Attachment } from './Attachments'
@@ -286,6 +287,7 @@ function CalendarPicker({ start, end, blockedRanges, onChange }: { start: string
 
 function App() {
   const [stays, setStays] = useState<Stay[]>([])
+  const [hasHostCalendar, setHasHostCalendar] = useState(false)
   const [bookingAddons, setBookingAddons] = useState<BookingAddon[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -302,7 +304,7 @@ function App() {
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
-  const [view, setView] = useState<'stays' | 'trips' | 'messages'>('stays')
+  const [view, setView] = useState<'stays' | 'trips' | 'messages' | 'calendars'>('stays')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState('')
   const [inboxRevision, setInboxRevision] = useState(0)
@@ -720,6 +722,15 @@ function App() {
     setHostOpen(true)
   }
 
+  const isSuperhost = profile?.email.trim().toLowerCase() === 'foyal.toloman@gmail.com'
+  const canUseCalendars = isSuperhost || hasHostCalendar
+  useEffect(() => {
+    let active = true
+    setHasHostCalendar(false)
+    if (token) void apiRequest<{ allowed: boolean }>('/calendars/access', token).then(({ allowed }) => { if (active) setHasHostCalendar(allowed) }).catch(() => {})
+    return () => { active = false }
+  }, [token, stays])
+
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -813,6 +824,7 @@ function App() {
   if (accountSettingsOpen && profile) return <AccountSettings token={token} profile={profile} onClose={() => setAccountSettingsOpen(false)} onSaved={(nextProfile) => { setProfile(nextProfile); localStorage.setItem('foyaltoloman:profile', JSON.stringify(nextProfile)) }} />
   if (settingsOpen) return <Settings token={token} onClose={() => setSettingsOpen(false)} onManageListings={() => { setSettingsOpen(false); setManageListingsOpen(true) }} />
   if (manageListingsOpen) return <ManageListings token={token} onClose={() => { setManageListingsOpen(false); void apiRequest<{ listings: Stay[] }>('/listings').then(({ listings }) => setStays(listings)).catch(() => setToast('Impossible d’actualiser les logements.')) }} onCreate={() => { setManageListingsOpen(false); openHost() }} />
+  if (canUseCalendars && view === 'calendars') return <Calendars token={token} onClose={() => { setView('stays'); setToast('') }} />
 
   return (
     <div className="app-shell">
@@ -824,6 +836,7 @@ function App() {
         <nav className="primary-nav" aria-label="Navigation principale">
           <button className={`nav-link ${view === 'stays' && !favoritesOnly ? 'active' : ''}`} onClick={resetFilters}>Séjours</button>
           <button className={`nav-link ${favoritesOnly ? 'active' : ''}`} onClick={openFavorites}>Mes favoris <span className="nav-count">{favorites.length}</span></button>
+           {canUseCalendars && <button className={`nav-link ${view === 'calendars' ? 'active' : ''}`} onClick={() => { setView('calendars'); setAccountOpen(false) }}>Calendriers</button>}
           <button className={`nav-link ${view === 'messages' ? 'active' : ''}`} onClick={openMessages}>Messages <span className="nav-count message-count">{conversations.reduce((total, conversation) => total + conversation.unread, 0)}</span></button>
         </nav>
 
@@ -840,6 +853,7 @@ function App() {
                 {profile && <>
                 <button onClick={() => { setAccountOpen(false); setAccountSettingsOpen(true) }}>Mon compte</button>
                 <button onClick={openTrips}>Mes voyages <span>{bookings.length}</span></button>
+                 {canUseCalendars && <button onClick={() => { setAccountOpen(false); setView('calendars') }}>Calendriers</button>}
                 <button onClick={openFavorites}>Mes favoris <span>{favorites.length}</span></button>
                 <button onClick={openMessages}>Messages <span>{conversations.reduce((total, conversation) => total + conversation.unread, 0)}</span></button>
                 <div className="menu-divider" />

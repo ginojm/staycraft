@@ -24,6 +24,8 @@ const migrationNames = [
   '016_listing_address.sql',
   '017_listing_wifi.sql',
   '018_listing_cleaning_fee.sql',
+  '019_payouts.sql',
+  '020_payout_status.sql',
 ]
 
 try {
