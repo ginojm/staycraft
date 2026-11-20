@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Foyaltoloman</string>
+    <string name="title_activity_main">Foyaltoloman</string>
+    <string name="package_name">com.foyaltoloman.app</string>
+    <string name="custom_url_scheme">com.foyaltoloman.app</string>
+</resources>

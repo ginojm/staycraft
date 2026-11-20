@@ -12,9 +12,14 @@
     "db:down": "docker compose stop db",
     "start": "node server/index.js",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mobile:sync": "npm run build && cap sync android",
+    "mobile:open": "cap open android",
+    "mobile:run": "cap run android",
+    "mobile:build": "npm run mobile:sync && gradlew.bat -p android assembleDebug"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "concurrently": "^10.0.7",
@@ -22,6 +27,8 @@
     "vite": "^8.3.6"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/core": "^7.4.4",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "dompurify": "^3.4.18",

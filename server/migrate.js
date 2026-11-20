@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { pool } from './db.js'
 
 const migrationsDirectory = join(dirname(fileURLToPath(import.meta.url)), 'migrations')
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+const maxDatabaseAttempts = 12
 const migrationNames = [
   '001_initial_schema.sql',
   '002_google_auth.sql',
@@ -28,7 +30,25 @@ const migrationNames = [
   '020_payout_status.sql',
 ]
 
+async function waitForDatabase() {
+  let lastError
+  for (let attempt = 1; attempt <= maxDatabaseAttempts; attempt += 1) {
+    try {
+      await pool.query('SELECT 1')
+      return
+    } catch (error) {
+      lastError = error
+      if (attempt === maxDatabaseAttempts) break
+      const delay = Math.min(5000, 500 * 2 ** (attempt - 1))
+      console.warn(`PostgreSQL indisponible (tentative ${attempt}/${maxDatabaseAttempts}), nouvelle tentative dans ${delay} ms.`)
+      await sleep(delay)
+    }
+  }
+  throw lastError
+}
+
 try {
+  await waitForDatabase()
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,

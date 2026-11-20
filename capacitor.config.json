@@ -1,0 +1,11 @@
+{
+  "appId": "com.foyaltoloman.app",
+  "appName": "Foyaltoloman",
+  "webDir": "dist",
+  "server": {
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

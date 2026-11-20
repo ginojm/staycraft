@@ -86,3 +86,25 @@ Avant une mise en production, configurez un prestataire de paiement et ses webho
 npm run build
 ```
 # staycraft
+
+## Application Android
+
+Le projet contient maintenant une application Android Capacitor dans `android/`. Elle réutilise le frontend React et communique avec l'API Express.
+
+Pour un build mobile, créez un fichier `.env.production.local` (non versionné) avec l'URL HTTPS publique de l'API :
+
+```dotenv
+VITE_API_URL=https://api.exemple.com
+```
+
+Puis lancez :
+
+```powershell
+npm run mobile:sync
+cd android
+./gradlew assembleDebug
+```
+
+Le fichier APK de debug sera produit dans `android/app/build/outputs/apk/debug/`. Pour publier sur Google Play, générez un bundle signé (`assembleRelease` ou `bundleRelease`) avec une clé de signature dédiée et configurez la fiche Play Console. Les secrets présents dans `.env` restent uniquement côté serveur et ne doivent jamais être inclus dans l'application Android.
+
+Pour tester l'authentification dans l'émulateur, laissez l'API démarrée dans un terminal avec `npm run dev:api`. `.env.local` doit utiliser `VITE_API_URL=http://10.0.2.2:3001` : `10.0.2.2` désigne la machine hôte depuis l'émulateur Android. Le trafic HTTP clair est activé uniquement pour ce test local dans `capacitor.config.json`; avant une publication, utilisez une API HTTPS et désactivez cette option.

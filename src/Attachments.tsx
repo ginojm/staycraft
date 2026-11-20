@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Download, FileText, Image as ImageIcon, X } from 'lucide-react'
+import { apiBaseUrl } from './api'
 export type Attachment = { id:string; name:string; mime:string; size:number }
 export const attachmentAccept='.jpg,.jpeg,.png,.webp,.pdf,.txt,.csv,.docx,.xlsx,.zip'
 export async function readAttachments(files:File[]) {
@@ -31,7 +32,7 @@ function AttachmentCard({file,token}:{file:Attachment;token:string}) {
     const controller=new AbortController()
     let objectUrl=''
     setPreview('');setError('');setLoading(true)
-    void fetch(`/api/attachments/${file.id}`,{headers:{Authorization:`Bearer ${token}`},signal:controller.signal})
+    void fetch(`${apiBaseUrl}/api/attachments/${file.id}`,{headers:{Authorization:`Bearer ${token}`},signal:controller.signal})
       .then(async(response)=>{
         if(!response.ok) throw new Error('Aperçu indisponible.')
         const blob=await response.blob()
@@ -44,7 +45,7 @@ function AttachmentCard({file,token}:{file:Attachment;token:string}) {
   const download=async()=>{
     setBusy(true);setError('')
     try {
-      const response=await fetch(`/api/attachments/${file.id}`,{headers:{Authorization:`Bearer ${token}`}})
+      const response=await fetch(`${apiBaseUrl}/api/attachments/${file.id}`,{headers:{Authorization:`Bearer ${token}`}})
       if(!response.ok) throw new Error('Téléchargement impossible.')
       const url=URL.createObjectURL(await response.blob())
       const link=document.createElement('a');link.href=url;link.download=file.name;link.click()
